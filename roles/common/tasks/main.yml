@@ -1,0 +1,17 @@
+---
+- name: Update and upgrade apt packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+
+- name: Install necessary packages
+  apt:
+    name:
+      - python3-pip
+      - python3-dev
+      - libpq-dev
+      - nginx
+      - curl
+    state: present

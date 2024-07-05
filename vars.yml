@@ -1,0 +1,5 @@
+---
+db_user: django_user
+db_password: your_secure_password
+db_name: django_db
+django_db_password: your_secure_password

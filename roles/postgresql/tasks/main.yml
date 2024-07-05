@@ -1,0 +1,65 @@
+---
+- name: Install PostgreSQL
+  apt:
+    name: 
+      - postgresql
+      - postgresql-contrib
+    state: present
+
+- name: Install psycopg2-binary
+  pip:
+    name: psycopg2-binary
+    state: present
+
+- name: Check if PostgreSQL data directory exists
+  stat:
+    path: /var/lib/postgresql/14/main
+  register: stat_result
+
+- name: Initialize PostgreSQL
+  command: /usr/lib/postgresql/14/bin/initdb -D /var/lib/postgresql/14/main
+  when: not stat_result.stat.exists
+  become: yes
+  become_user: postgres
+
+- name: Ensure PostgreSQL is running
+  service:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: Create PostgreSQL user
+  become: yes
+  become_user: postgres
+  postgresql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    state: present
+
+- name: Create PostgreSQL database
+  become: yes
+  become_user: postgres
+  postgresql_db:
+    name: "{{ db_name }}"
+    owner: "{{ db_user }}"
+    state: present
+
+- name: Grant all privileges on database
+  become: yes
+  become_user: postgres
+  postgresql_privs:
+    db: "{{ db_name }}"
+    role: "{{ db_user }}"
+    objs: ALL_IN_SCHEMA
+    privs: SELECT,INSERT,UPDATE,DELETE
+
+- name: Configure PostgreSQL to allow password authentication
+  template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/14/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: 0600
+  become: yes
+  become_user: postgres
+  notify: restart postgresql

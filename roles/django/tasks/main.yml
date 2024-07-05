@@ -1,0 +1,88 @@
+---
+- name: Install Django and Django REST Framework
+  pip:
+    name:
+      - django
+      - djangorestframework
+      - psycopg2-binary
+
+- name: Create directory for Django project
+  file:
+    path: /opt/myproject
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Create Django project
+  command: django-admin startproject myproject /opt/myproject
+  args:
+    creates: /opt/myproject/manage.py
+
+- name: Configure Django settings
+  blockinfile:
+    path: /opt/myproject/myproject/settings.py
+    block: |
+      DATABASES = {
+          'default': {
+              'ENGINE': 'django.db.backends.postgresql',
+              'NAME': 'django_db',
+              'USER': 'django_user',
+              'PASSWORD': '{{ django_db_password }}',
+              'HOST': 'localhost',
+              'PORT': '5432',
+          }
+      }
+      ALLOWED_HOSTS = ['localhost', '127.0.0.1', '{{ ansible_host }}']
+  notify: restart django
+
+
+- name: Migrate Django database
+  command: python3 manage.py migrate
+  args:
+    chdir: /opt/myproject
+
+- name: Create Django systemd service
+  template:
+    src: django.service.j2
+    dest: /etc/systemd/system/django.service
+
+- name: Start and enable Django service
+  systemd:
+    name: django
+    state: started
+    enabled: true
+
+- name: Add health check endpoint
+  blockinfile:
+    path: /opt/myproject/myproject/urls.py
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    block: |
+      from django.urls import path
+      from django.http import JsonResponse
+      import os
+      import psycopg2
+
+      def healthcheck(request):
+          try:
+              conn = psycopg2.connect(
+                  dbname="django_db",
+                  user="django_user",
+                  password="{{ django_db_password }}",
+                  host="localhost"
+              )
+              conn.close()
+              postgres_status = "ok"
+          except:
+              postgres_status = "failed"
+
+          django_status = "ok"
+          nginx_status = "ok" if os.system("systemctl is-active --quiet nginx") == 0 else "failed"
+
+          return JsonResponse({
+              "nginx": nginx_status,
+              "django": django_status,
+              "postgresql": postgres_status
+          })
+
+      urlpatterns += [path('healthcheck/', healthcheck)]

@@ -1,0 +1,10 @@
+---
+- hosts: servers
+  become: true
+  vars_files:
+    - vars.yml
+  roles:
+    - common
+    - postgresql
+    - django
+    - nginx
